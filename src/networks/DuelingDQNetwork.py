@@ -21,8 +21,8 @@ class DuelingDQNetwork(nn.Module):
         self.Advantage = nn.Linear(512, n_actions)
 
         self.optimizer = optim.RMSprop(self.parameters(), lr=learning_rate)
-        self.loss = nn.MSELoss()
-
+        self.loss = nn.MSELoss(reduction='none')
+        
         self.device = device
         self.to(self.device)
 

@@ -1,14 +1,15 @@
 import torch
 import warnings
 import matplotlib.pyplot as plt
-import os
+import torch
 import numpy as np
 
 def get_device(device):
-    if device == 'cuda' and not torch.cuda.is_available():
+    if device == 'cuda' and torch.cuda.is_available():
+        return torch.device('cuda')
+    else:
         warnings.warn("CUDA not available. Falling back to CPU.")
-        return "cpu"
-    return "cuda"
+        return torch.device('cpu')
 
 def plot_results(steps, epsilon_history, scores, plot_path):
     figure = plt.figure()

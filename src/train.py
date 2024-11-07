@@ -14,7 +14,7 @@ def train(args):
     device = get_device(args.device)
     print("Using device: ", device)
 
-    env = make_atari(args.env_name)
+    env = make_atari(args.env_name, render_mode=args.render_mode)
     env = wrap_deepmind(env)
 
     if args.architecture == 'dueling':
@@ -23,8 +23,9 @@ def train(args):
                             epsilon=args.epsilon, min_epsilon=args.min_epsilon, dec_epsilon=args.dec_epsilon, 
                             batch_size=args.batch_size, memory_size=args.memory_size, 
                             replace_network_count=args.replace_network_count, device=device,
-                            load_checkpoint_dir=args.load_checkpoint, save_checkpoint_dir=args.save_checkpoint)
-        
+                            load_checkpoint_dir=args.load_checkpoint, save_checkpoint_dir=args.save_checkpoint,
+                            buffer_type=args.buffer_type, alpha=args.alpha, beta=args.beta)
+    
     if args.load_checkpoint:
         agent.load_model()
         print(f"Loaded model from {args.load_checkpoint}")
@@ -83,9 +84,13 @@ def parse_args():
                         help="Choose DQN architecture: dueling or double")
     parser.add_argument('--buffer_type', type=str, choices=['uniform', 'prioritized'], default='uniform',
                         help="Choose replay buffer type: uniform or prioritized")
+    parser.add_argument('--alpha', type=float, default=0.6, help="Alpha parameter for PER (prioritization level)")
+    parser.add_argument('--beta', type=float, default=0.4, help="Beta parameter for PER (importance-sampling level)")
     parser.add_argument('--load_checkpoint', type=str, default=None, help="Path to load model checkpoint")
     parser.add_argument('--save_checkpoint', type=str, default=None, help="Path to save model checkpoint")
     parser.add_argument('--plot_dir', type=str, default=None, help="Plot the training result")
+    parser.add_argument('--render_mode', type=str, choices=['human', 'rgb_array'], default='rgb_array',
+                        help="Choose render mode")
     return parser.parse_args()
 
 

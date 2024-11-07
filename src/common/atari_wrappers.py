@@ -8,8 +8,8 @@ from collections import deque
 from gym import spaces
 from .wrappers import TimeLimit
 
-def make_atari(env_id, max_episode_steps=None):
-    env = gym.make(env_id)
+def make_atari(env_id, max_episode_steps=None, render_mode="rgb_array"):
+    env = gym.make(env_id, render_mode=render_mode)
     assert 'NoFrameskip' in env.spec.id
     env = NoopResetEnv(env, noop_max=30)
     env = MaxAndSkipEnv(env, skip=4)

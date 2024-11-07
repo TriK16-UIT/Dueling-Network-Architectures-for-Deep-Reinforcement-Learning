@@ -7,8 +7,8 @@ import os
 
 class DuelingDQNAgent(object):
     def __init__(self, learning_rate, n_actions, input_dims, gamma,
-                 epsilon, batch_size, memory_size, replace_network_count,
-                 dec_epsilon=1e-5, min_epsilon=0.1, save_checkpoint_dir=None, load_checkpoint_dir=None, device="cpu"):
+                 epsilon, batch_size, memory_size, replace_network_count, alpha=0.6, beta=0.4,
+                 dec_epsilon=1e-5, min_epsilon=0.1, save_checkpoint_dir=None, load_checkpoint_dir=None, device="cpu", buffer_type='uniform'):
         """
         Initialize Dueling DQN Agent with improved type hints and documentation.
         
@@ -34,11 +34,14 @@ class DuelingDQNAgent(object):
         self.batch_size = batch_size
         self.memory_size = memory_size
         self.replace_network_count = replace_network_count
+        self.alpha = alpha
+        self.beta = beta
         self.dec_epsilon = dec_epsilon
         self.min_epsilon = min_epsilon
         self.action_indices = [i for i in range(n_actions)]
         self.learn_steps_count = 0
         self.device = device
+        self.buffer_type = buffer_type
         self.save_checkpoint_dir = save_checkpoint_dir or os.path.join(os.getcwd(), 'tmp/ddqn/')
         self.load_checkpoint_dir = load_checkpoint_dir or os.path.join(os.getcwd(), 'tmp/ddqn/')
         
@@ -52,7 +55,11 @@ class DuelingDQNAgent(object):
                                        save_checkpoint_dir=self.save_checkpoint_dir,
                                        load_checkpoint_dir=self.load_checkpoint_dir,
                                        device=self.device)
-        self.replay_buffer = ReplayBuffer(memory_size=self.memory_size)
+        
+        if buffer_type == 'uniform':
+            self.replay_buffer = ReplayBuffer(memory_size=self.memory_size)
+        else:
+            self.replay_buffer = PrioritizedReplayBuffer(size=self.memory_size, alpha=self.alpha)
 
     def decrement_epsilon(self):
         """
@@ -77,16 +84,22 @@ class DuelingDQNAgent(object):
         Sample a batch of experiences from replay buffer.
         
         Returns:
-            Tuple of (state, action, reward, next_state, done) tensors
+            Tuple of (state, action, reward, next_state, done, weights, indices) tensors
         """
-        state, action, reward, next_state, done = self.replay_buffer.sample(batch_size=self.batch_size)
+        if self.buffer_type == 'uniform':
+            state, action, reward, next_state, done = self.replay_buffer.sample(batch_size=self.batch_size)
+            weights, indices = np.ones(self.batch_size), None
+        else:
+            state, action, reward, next_state, done, weights, indices = self.replay_buffer.sample(batch_size=self.batch_size, beta=self.beta)
 
         return (
             torch.tensor(state, dtype=torch.float32).to(self.device),
             torch.tensor(action).to(self.device),
             torch.tensor(reward, dtype=torch.float32).to(self.device),
             torch.tensor(next_state, dtype=torch.float32).to(self.device),
-            torch.tensor(done).to(self.device)
+            torch.tensor(done).to(self.device),
+            torch.tensor(weights, dtype=torch.float32).to(self.device),
+            indices
         )
     
     def replace_target_network(self):
@@ -103,7 +116,7 @@ class DuelingDQNAgent(object):
 
         if np.random.random() > self.epsilon:
             with torch.no_grad():
-                state = torch.tensor([observation], dtype=torch.float).to(self.q_eval.device)
+                state = torch.tensor([observation], dtype=torch.float).to(self.device)
                 value, advantages = self.q_eval.forward(state)
 
                 action = torch.argmax(advantages).item()
@@ -120,7 +133,7 @@ class DuelingDQNAgent(object):
         self.q_eval.optimizer.zero_grad()
         self.replace_target_network()
 
-        state, action, reward, next_state, done = self.get_sample_experience()
+        state, action, reward, next_state, done, weights, indices = self.get_sample_experience()
         batch_indices = torch.arange(self.batch_size)
 
         value_s, advantage_s = self.q_eval.forward(state)
@@ -134,12 +147,19 @@ class DuelingDQNAgent(object):
         q_next[done] = 0.0
         q_target = reward + self.gamma * q_next.max(dim=1)[0]
 
-        loss = self.q_eval.loss(q_target, q_pred).to(self.q_eval.device)
+        #MSELoss
+        # loss = (weights * (q_target - q_pred) ** 2).mean()
+        loss = self.q_eval.loss(q_target, q_pred).to(self.device)
+        loss = (weights * loss).mean()
         loss.backward()
 
         self.q_eval.optimizer.step()
         self.decrement_epsilon()
         self.learn_steps_count += 1
+
+        if self.buffer_type == 'prioritized' and indices is not None:
+            td_errors = torch.abs(q_target - q_pred).detach().cpu().numpy() + 1e-6
+            self.replay_buffer.update_priorities(indices, td_errors)
 
     def save_model(self):
         """
