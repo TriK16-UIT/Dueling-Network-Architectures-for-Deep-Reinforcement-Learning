@@ -8,14 +8,29 @@ warnings.filterwarnings("ignore")
 
 from agents.DuelingDQNAgent import DuelingDQNAgent
 from common.atari_wrappers import make_atari, wrap_deepmind
-from utils import get_device, plot_results
+from utils import get_device, plot_results, set_global_seeds
 
 def train(args):
+    """
+    Train the Dueling DQN agent on the specified Atari environment.
+
+    Args:
+        args (argparse.Namespace): Command-line arguments specifying training parameters.
+    """
+    set_global_seeds(args.seed)
+
+    print("Training parameters:")
+    print("(" + "; ".join([f'"{arg}": {value}' for arg, value in vars(args).items()]) + ")")
+    print("\nStarting training...\n")
+
     device = get_device(args.device)
     print("Using device: ", device)
 
     env = make_atari(args.env_name, render_mode=args.render_mode)
-    env = wrap_deepmind(env)
+    if args.seed is not None:
+        env.seed(args.seed)
+    # test scale=True    
+    env = wrap_deepmind(env, scale=False)
 
     if args.architecture == 'dueling':
         agent = DuelingDQNAgent(learning_rate=args.learning_rate, n_actions=env.action_space.n, 
@@ -24,7 +39,8 @@ def train(args):
                             batch_size=args.batch_size, memory_size=args.memory_size, 
                             replace_network_count=args.replace_network_count, device=device,
                             load_checkpoint_dir=args.load_checkpoint, save_checkpoint_dir=args.save_checkpoint,
-                            buffer_type=args.buffer_type, alpha=args.alpha, beta=args.beta)
+                            buffer_type=args.buffer_type, clip_grad_norm=args.clip_grad_norm,
+                            alpha=args.alpha, beta=args.beta, max_beta=args.max_beta, beta_iters=args.beta_iters)
     
     if args.load_checkpoint:
         agent.load_model()
@@ -32,6 +48,7 @@ def train(args):
 
     scores, epsilon_history, steps = [], [], []
     step_count, best_score = 0, -np.inf
+    # no_improvement_count = 0
 
     for i in range(args.n_games):
         obs = env.reset()
@@ -53,13 +70,21 @@ def train(args):
         steps.append(step_count)
         avg_score = np.mean(scores)
 
-        if score > avg_score:
-            agent.save_model()
+        # Save the model if this is the best score achieved
         if score > best_score:
             best_score = score
+            agent.save_model()
+            print(f"New best score: {best_score:.2f}. Model saved.")
+            # no_improvement_count = 0  # Reset counter if improvement is found
+        # else:
+            # no_improvement_count += 1
 
         print(f'Episode {i+1}/{args.n_games} | Score: {score:.2f} | Avg Score: {avg_score:.2f} | '
-              f'Best Score: {best_score:.2f} | Epsilon: {agent.epsilon:.3f} | Steps: {step_count}')
+              f'Best Score: {best_score:.2f} | Epsilon: {agent.epsilon:.3f} | Beta: {agent.beta:.3f} | Steps: {step_count}')
+        
+        # if no_improvement_count >= args.early_stopping_threshold:
+        #     print("Early stopping triggered. No improvement in the last 50 episodes.")
+        #     break
 
     if args.plot_dir:
         os.makedirs(args.plot_dir, exist_ok=True)
@@ -68,6 +93,12 @@ def train(args):
         print(f"Training results plotted to {plot_path}")
 
 def parse_args():
+    """
+    Parse command-line arguments for training the DQN agent.
+
+    Returns:
+        argparse.Namespace: Parsed arguments.
+    """
     parser = argparse.ArgumentParser(description="Train DQN agent with various architectures.")
     parser.add_argument('--env_name', type=str, default='PongNoFrameskip-v4', help='Name of the Atari environment')
     parser.add_argument('--n_games', type=int, default=1000, help="Number of games to train")
@@ -84,13 +115,18 @@ def parse_args():
                         help="Choose DQN architecture: dueling or double")
     parser.add_argument('--buffer_type', type=str, choices=['uniform', 'prioritized'], default='uniform',
                         help="Choose replay buffer type: uniform or prioritized")
+    parser.add_argument('--clip_grad_norm', action='store_true', default=False, help="Enable gradient clipping")
     parser.add_argument('--alpha', type=float, default=0.6, help="Alpha parameter for PER (prioritization level)")
     parser.add_argument('--beta', type=float, default=0.4, help="Beta parameter for PER (importance-sampling level)")
+    parser.add_argument('--max_beta', type=float, default=1.0, help="Max Beta for PER")
+    parser.add_argument('--beta_iters', type=int, default=1e+6, help="For calculating beta increasing rate")
     parser.add_argument('--load_checkpoint', type=str, default=None, help="Path to load model checkpoint")
     parser.add_argument('--save_checkpoint', type=str, default=None, help="Path to save model checkpoint")
+    # parser.add_argument('--early_stopping_threshold', type=int, default=50, help="Early stopping if no improvement after no. of episodes")
     parser.add_argument('--plot_dir', type=str, default=None, help="Plot the training result")
     parser.add_argument('--render_mode', type=str, choices=['human', 'rgb_array'], default='rgb_array',
                         help="Choose render mode")
+    parser.add_argument('--seed', type=int, default=None, help="Random seed for reproducibility")
     return parser.parse_args()
 
 

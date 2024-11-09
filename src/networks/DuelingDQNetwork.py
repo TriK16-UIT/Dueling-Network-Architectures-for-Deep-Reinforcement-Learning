@@ -6,6 +6,17 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 class DuelingDQNetwork(nn.Module):
+    """
+    Dueling Deep Q-Network architecture with convolutional and fully connected layers.
+
+    Args:
+        n_actions (int): Number of possible actions.
+        input_dims (tuple): Dimensions of the input state.
+        name (str): Name of the network (used for saving).
+        save_checkpoint_dir (str): Directory to save the model checkpoint.
+        load_checkpoint_dir (str): Directory to load the model checkpoint from.
+        device (str): Device to run computations on ('cpu' or 'cuda').
+    """
     def __init__(self, learning_rate, n_actions, input_dims, name, save_checkpoint_dir, load_checkpoint_dir, device):
         super(DuelingDQNetwork, self).__init__()
         self.conv1 = nn.Conv2d(input_dims[0], 32, kernel_size=8, stride=4)
@@ -20,8 +31,11 @@ class DuelingDQNetwork(nn.Module):
         self.Value = nn.Linear(512, 1)
         self.Advantage = nn.Linear(512, n_actions)
 
-        self.optimizer = optim.RMSprop(self.parameters(), lr=learning_rate)
-        self.loss = nn.MSELoss(reduction='none')
+        # According to many implementations, Adam and Huber Loss are better compared to RMSprop and MSELoss
+        # self.optimizer = optim.RMSprop(self.parameters(), lr=learning_rate)
+        # self.loss = nn.MSELoss(reduction='none')
+        self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+        self.loss = nn.SmoothL1Loss(reduction='none')
         
         self.device = device
         self.to(self.device)
@@ -33,16 +47,33 @@ class DuelingDQNetwork(nn.Module):
         self.load_checkpoint_name = os.path.join(load_checkpoint_dir, name + ".pt")
 
     def get_conv_output_dimensions(self, input_dims):
-        """Get last convolutional layer output dimenions to feed in Linear layer"""
-        temp = torch.zeros(1, *input_dims)
-        dim1 = self.conv1(temp)
-        dim2 = self.conv2(dim1)
-        dim3 = self.conv3(dim2)
+        """
+        Computes the number of output features after the convolutional layers.
+
+        Args:
+            input_dims (tuple): Dimensions of the input state.
+
+        Returns:
+            int: The total number of features output by the convolutional layers.
+        """
+        with torch.no_grad():
+            temp = torch.zeros(1, *input_dims)
+            dim1 = self.conv1(temp)
+            dim2 = self.conv2(dim1)
+            dim3 = self.conv3(dim2)
         return int(np.prod(dim3.size()))
 
     
     def forward(self, data):
-        """Feed forward the network to get the value, advantage tuple"""
+        """
+        Performs a forward pass through the network.
+
+        Args:
+            data (torch.Tensor): Input tensor representing the state.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: A tuple containing the value and advantage tensors.
+        """
         conv_layer1 = F.relu(self.conv1(data))
         conv_layer2 = F.relu(self.conv2(conv_layer1))
         conv_layer3 = F.relu(self.conv3(conv_layer2))

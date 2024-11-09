@@ -1,1 +1,4 @@
 .venv
+models
+tmp
+plots

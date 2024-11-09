@@ -3,6 +3,7 @@ import warnings
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
+import random
 
 def get_device(device):
     if device == 'cuda' and torch.cuda.is_available():
@@ -35,3 +36,12 @@ def plot_results(steps, epsilon_history, scores, plot_path):
 
     plt.tight_layout()
     plt.savefig(plot_path)
+
+def set_global_seeds(seed):
+    if seed is not None:
+        np.random.seed(seed)
+        random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
