@@ -7,6 +7,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from agents.DuelingDQNAgent import DuelingDQNAgent
+from agents.DuelingDDQNAgent import DuelingDDQNAgent
 from common.atari_wrappers import make_atari, wrap_deepmind
 from utils import get_device, plot_results, set_global_seeds
 
@@ -30,7 +31,7 @@ def train(args):
     if args.seed is not None:
         env.seed(args.seed)
     # test scale=True    
-    env = wrap_deepmind(env, scale=False)
+    env = wrap_deepmind(env)
 
     if args.architecture == 'dueling':
         agent = DuelingDQNAgent(learning_rate=args.learning_rate, n_actions=env.action_space.n, 
@@ -38,17 +39,24 @@ def train(args):
                             epsilon=args.epsilon, min_epsilon=args.min_epsilon, dec_epsilon=args.dec_epsilon, 
                             batch_size=args.batch_size, memory_size=args.memory_size, 
                             replace_network_count=args.replace_network_count, device=device,
-                            load_checkpoint_dir=args.load_checkpoint, save_checkpoint_dir=args.save_checkpoint,
                             buffer_type=args.buffer_type, clip_grad_norm=args.clip_grad_norm,
-                            alpha=args.alpha, beta=args.beta, max_beta=args.max_beta, beta_iters=args.beta_iters)
-    
+                            alpha=args.alpha, beta=args.beta, max_beta=args.max_beta, inc_beta=args.inc_beta)
+    elif args.architecture == 'dueling double':
+        agent = DuelingDDQNAgent(learning_rate=args.learning_rate, n_actions=env.action_space.n, 
+                            input_dims=env.observation_space.shape, gamma=args.gamma,
+                            epsilon=args.epsilon, min_epsilon=args.min_epsilon, dec_epsilon=args.dec_epsilon, 
+                            batch_size=args.batch_size, memory_size=args.memory_size, 
+                            replace_network_count=args.replace_network_count, device=device,
+                            buffer_type=args.buffer_type, clip_grad_norm=args.clip_grad_norm,
+                            alpha=args.alpha, beta=args.beta, max_beta=args.max_beta, inc_beta=args.inc_beta) 
+            
     if args.load_checkpoint:
-        agent.load_model()
+        agent.load_model(args.load_checkpoint)
         print(f"Loaded model from {args.load_checkpoint}")
 
-    scores, epsilon_history, steps = [], [], []
-    step_count, best_score = 0, -np.inf
-    # no_improvement_count = 0
+    scores, epsilon_history, steps, scores_window = [], [], [], []
+    step_count, best_score, window_size = 0, -np.inf, 100
+    saved_mean_reward = None
 
     for i in range(args.n_games):
         obs = env.reset()
@@ -59,33 +67,40 @@ def train(args):
             new_obs, reward, done, info = env.step(action)
             score += reward
 
-            agent.store_experience(obs, action, reward, new_obs, int(done))
+            agent.store_experience(obs, action, reward, new_obs, done)
             agent.learn()
 
             obs = new_obs
             step_count += 1
         
         scores.append(score)
+        scores_window.append(score)
+        if len(scores_window) > window_size:
+            scores_window.pop(0)
+        avg_score = np.mean(scores_window)
         epsilon_history.append(agent.epsilon)
         steps.append(step_count)
-        avg_score = np.mean(scores)
 
         # Save the model if this is the best score achieved
         if score > best_score:
             best_score = score
-            agent.save_model()
-            print(f"New best score: {best_score:.2f}. Model saved.")
-            # no_improvement_count = 0  # Reset counter if improvement is found
-        # else:
-            # no_improvement_count += 1
+            agent.save_model(args.save_checkpoint, 'best_model.pth')
+            print(f"New best score: {best_score:.2f}.")
+
+        # if avg_score > best_score:
+        #     agent.save_model(args.save_checkpoint, 'avg_model.pth')
+        #     print(f"New best average score: {avg_score:.2f}.")
+
+        if saved_mean_reward is None or avg_score > saved_mean_reward:
+            saved_mean_reward = avg_score
+            agent.save_model(args.save_checkpoint, 'avg_model.pth')
+            print(f"New Avg score: {avg_score:.2f}.")
 
         print(f'Episode {i+1}/{args.n_games} | Score: {score:.2f} | Avg Score: {avg_score:.2f} | '
               f'Best Score: {best_score:.2f} | Epsilon: {agent.epsilon:.3f} | Beta: {agent.beta:.3f} | Steps: {step_count}')
         
-        # if no_improvement_count >= args.early_stopping_threshold:
-        #     print("Early stopping triggered. No improvement in the last 50 episodes.")
-        #     break
-
+    agent.save_model(args.save_checkpoint, 'last_model.pth')
+        
     if args.plot_dir:
         os.makedirs(args.plot_dir, exist_ok=True)
         plot_path = os.path.join(args.plot_dir, f"{args.env_name}_{args.architecture}_{args.n_games}.png")
@@ -112,21 +127,21 @@ def parse_args():
     parser.add_argument('--memory_size', type=int, default=1000, help="Replay buffer size")
     parser.add_argument('--replace_network_count', type=int, default=1000, help="Network replacement frequency")
     parser.add_argument('--architecture', type=str, choices=['dueling', 'dueling double'], default='dueling',
-                        help="Choose DQN architecture: dueling or double")
+                        help="Choose DQN architecture")
     parser.add_argument('--buffer_type', type=str, choices=['uniform', 'prioritized'], default='uniform',
                         help="Choose replay buffer type: uniform or prioritized")
     parser.add_argument('--clip_grad_norm', action='store_true', default=False, help="Enable gradient clipping")
     parser.add_argument('--alpha', type=float, default=0.6, help="Alpha parameter for PER (prioritization level)")
     parser.add_argument('--beta', type=float, default=0.4, help="Beta parameter for PER (importance-sampling level)")
     parser.add_argument('--max_beta', type=float, default=1.0, help="Max Beta for PER")
-    parser.add_argument('--beta_iters', type=int, default=1e+6, help="For calculating beta increasing rate")
+    parser.add_argument('--inc_beta', type=float, default=3e-7, help="Increment beta for PER")
     parser.add_argument('--load_checkpoint', type=str, default=None, help="Path to load model checkpoint")
-    parser.add_argument('--save_checkpoint', type=str, default=None, help="Path to save model checkpoint")
-    # parser.add_argument('--early_stopping_threshold', type=int, default=50, help="Early stopping if no improvement after no. of episodes")
+    parser.add_argument('--save_checkpoint', type=str, default='tmp', help="Path to save model checkpoint")
     parser.add_argument('--plot_dir', type=str, default=None, help="Plot the training result")
     parser.add_argument('--render_mode', type=str, choices=['human', 'rgb_array'], default='rgb_array',
                         help="Choose render mode")
     parser.add_argument('--seed', type=int, default=None, help="Random seed for reproducibility")
+    parser.add_argument('--window_size', type=int, default=100, help="Number of rewards for avg rewards")
     return parser.parse_args()
 
 

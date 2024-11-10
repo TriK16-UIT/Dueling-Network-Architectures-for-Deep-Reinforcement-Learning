@@ -6,12 +6,12 @@ import numpy as np
 import os
 from torch.nn.utils import clip_grad_norm_
 
-class DuelingDQNAgent(object):
+class DuelingDDQNAgent(object):
     def __init__(self, n_actions, input_dims, learning_rate=1e-4, gamma=0.99,
                  epsilon=0.01, batch_size=32, memory_size=1000, replace_network_count=1000, clip_grad_norm=False, alpha=0.6, beta=0.4, max_beta=1.0, inc_beta=3e-7,
                  dec_epsilon=1e-5, min_epsilon=0.1, device="cpu", buffer_type='uniform'):
         """
-        Initialize the Dueling DQN Agent.
+        Initialize the Dueling Double DQN Agent.
 
         Args:
         learning_rate (float): Learning rate for the optimizer.
@@ -67,10 +67,10 @@ class DuelingDQNAgent(object):
             self.replay_buffer = PrioritizedReplayBuffer(size=self.memory_size, alpha=self.alpha)
 
     def decrement_epsilon(self):
-        """
-        Decay epsilon by a predefined rate until it reaches the minimum value.
-        """
-        self.epsilon = self.epsilon - self.dec_epsilon if self.epsilon > self.min_epsilon else self.min_epsilon
+            """
+            Decay epsilon by a predefined rate until it reaches the minimum value.
+            """
+            self.epsilon = self.epsilon - self.dec_epsilon if self.epsilon > self.min_epsilon else self.min_epsilon
 
     def increment_beta(self):
         """
@@ -106,7 +106,7 @@ class DuelingDQNAgent(object):
             torch.tensor(weights, dtype=torch.float32).to(self.device),
             indices
         )
-    
+
     def replace_target_network(self):
         """
         Updates the parameters after replace_network_count steps
@@ -128,7 +128,7 @@ class DuelingDQNAgent(object):
             action = np.random.choice(self.n_actions)
 
         return action
-    
+
     def learn(self):
         """Train the agent on a batch of experiences."""
         if len(self.replay_buffer) < self.batch_size:
@@ -140,24 +140,21 @@ class DuelingDQNAgent(object):
         state, action, reward, next_state, done, weights, indices = self.get_sample_experience()
         batch_indices = torch.arange(self.batch_size, device=self.device)
 
-        q_pred = self.q_eval.forward(state)
-        q_pred = q_pred[batch_indices, action]
-        
-        with torch.no_grad():
-            q_next = self.q_next.forward(next_state)
-            q_next_max = q_next.max(dim=1)[0]
-            q_next_max[done] = 0.0
-            
-        q_target = reward + self.gamma * q_next_max
-        q_target[done] = reward[done]
+        q_pred = self.q_eval(state)
+        q_pred = q_pred.gather(1, action.unsqueeze(1).long()).squeeze(1)
 
-        #MSELoss
-        # loss = (weights * (q_target - q_pred) ** 2).mean()
-        loss = self.q_eval.loss(q_pred, q_target).to(self.device)
+        q_eval_next = self.q_eval(next_state)  # Shape: [batch_size, n_actions]
+        max_actions = torch.argmax(q_eval_next, dim=1)
+
+        q_next = self.q_next(next_state)  # Shape: [batch_size, n_actions]
+        q_target_next = q_next[batch_indices, max_actions]
+
+        q_target = reward + self.gamma * q_target_next * (~done)
+
+        loss = self.q_eval.loss(q_pred, q_target.detach()).to(self.device)
         loss = (weights * loss).mean()
         loss.backward()
 
-        #Gradient clipping (10.0 based on paper)
         if self.clip_grad_norm:
             clip_grad_norm_(self.q_eval.parameters(), 10.0)
 
@@ -189,4 +186,3 @@ class DuelingDQNAgent(object):
         # Optionally, you can also load the state_dict into q_next if needed
         self.q_next.load_state_dict(self.q_eval.state_dict())
         print(f"Model loaded from {path}")
-

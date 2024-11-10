@@ -17,7 +17,7 @@ class DuelingDQNetwork(nn.Module):
         load_checkpoint_dir (str): Directory to load the model checkpoint from.
         device (str): Device to run computations on ('cpu' or 'cuda').
     """
-    def __init__(self, learning_rate, n_actions, input_dims, name, save_checkpoint_dir, load_checkpoint_dir, device):
+    def __init__(self, learning_rate, n_actions, input_dims, device):
         super(DuelingDQNetwork, self).__init__()
         self.conv1 = nn.Conv2d(input_dims[0], 32, kernel_size=8, stride=4)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
@@ -28,8 +28,8 @@ class DuelingDQNetwork(nn.Module):
         self.fc1 = nn.Linear(self.conv_output_dims, 1024)
         self.fc2 = nn.Linear(1024, 512)
 
-        self.Value = nn.Linear(512, 1)
-        self.Advantage = nn.Linear(512, n_actions)
+        self.value = nn.Linear(512, 1)
+        self.advantage = nn.Linear(512, n_actions)
 
         # According to many implementations, Adam and Huber Loss are better compared to RMSprop and MSELoss
         # self.optimizer = optim.RMSprop(self.parameters(), lr=learning_rate)
@@ -39,12 +39,6 @@ class DuelingDQNetwork(nn.Module):
         
         self.device = device
         self.to(self.device)
-
-        self.save_checkpoint_dir = save_checkpoint_dir
-        self.save_checkpoint_name = os.path.join(save_checkpoint_dir, name + ".pt")
-
-        self.load_checkpoint_dir = load_checkpoint_dir
-        self.load_checkpoint_name = os.path.join(load_checkpoint_dir, name + ".pt")
 
     def get_conv_output_dimensions(self, input_dims):
         """
@@ -72,7 +66,7 @@ class DuelingDQNetwork(nn.Module):
             data (torch.Tensor): Input tensor representing the state.
 
         Returns:
-            Tuple[torch.Tensor, torch.Tensor]: A tuple containing the value and advantage tensors.
+            torch.Tensor: Tensor containing the Q-values for each action.
         """
         conv_layer1 = F.relu(self.conv1(data))
         conv_layer2 = F.relu(self.conv2(conv_layer1))
@@ -83,26 +77,25 @@ class DuelingDQNetwork(nn.Module):
         fc_layer1 = F.relu(self.fc1(output_conv_layer))
         fc_layer2 = F.relu(self.fc2(fc_layer1))
 
-        value = self.Value(fc_layer2)
-        advantage = self.Advantage(fc_layer2)
+        value = self.value(fc_layer2)
+        advantage = self.advantage(fc_layer2)
 
-        return value, advantage
+        q_values = value + (advantage - advantage.mean(dim=1, keepdim=True))
+
+        return q_values
     
-    def save_checkpoint(self):
-        """Saves the checkpoint to the desired file"""
-        print('Saving checkpoint...')
-        os.makedirs(self.save_checkpoint_dir, exist_ok=True)
-        print(self.save_checkpoint_name)
-        torch.save(self.state_dict(), self.save_checkpoint_name)
-
-    def load_checkpoint(self):
-        """Loads the checkpoint from the saved file"""
-        print('Loading checkpoint...')
-        if not os.path.isfile(self.load_checkpoint_name):
-            raise FileNotFoundError(f"Checkpoint file '{self.load_checkpoint_name}' not found.")
-        print(self.load_checkpoint_name)
-        self.load_state_dict(torch.load(self.load_checkpoint_name))
-        print("Checkpoint loaded successfully.")
+    def save_checkpoint(self, path):
+        """
+        Saves the model's state_dict to the specified path.
+        """
+        torch.save(self.state_dict(), path)
+    def load_checkpoint(self, path):
+        """
+        Loads the model's state_dict from the specified path.
+        """
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"Checkpoint file '{path}' not found.")
+        self.load_state_dict(torch.load(path, map_location=self.device))
     
 
 
