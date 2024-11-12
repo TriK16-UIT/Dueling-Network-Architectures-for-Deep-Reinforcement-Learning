@@ -8,6 +8,8 @@ warnings.filterwarnings("ignore")
 
 from agents.DuelingDQNAgent import DuelingDQNAgent
 from agents.DuelingDDQNAgent import DuelingDDQNAgent
+from agents.DQNAgent import DQNAgent
+from agents.DDQNAgent import DDQNAgent
 from common.atari_wrappers import make_atari, wrap_deepmind
 from utils import get_device, plot_results, set_global_seeds
 
@@ -41,7 +43,7 @@ def train(args):
                             replace_network_count=args.replace_network_count, device=device,
                             buffer_type=args.buffer_type, clip_grad_norm=args.clip_grad_norm,
                             alpha=args.alpha, beta=args.beta, max_beta=args.max_beta, inc_beta=args.inc_beta)
-    elif args.architecture == 'dueling double':
+    elif args.architecture == 'dueling_double':
         agent = DuelingDDQNAgent(learning_rate=args.learning_rate, n_actions=env.action_space.n, 
                             input_dims=env.observation_space.shape, gamma=args.gamma,
                             epsilon=args.epsilon, min_epsilon=args.min_epsilon, dec_epsilon=args.dec_epsilon, 
@@ -49,7 +51,24 @@ def train(args):
                             replace_network_count=args.replace_network_count, device=device,
                             buffer_type=args.buffer_type, clip_grad_norm=args.clip_grad_norm,
                             alpha=args.alpha, beta=args.beta, max_beta=args.max_beta, inc_beta=args.inc_beta) 
-            
+    elif args.architecture == 'natural':
+        agent = DQNAgent(learning_rate=args.learning_rate, n_actions=env.action_space.n, 
+                            input_dims=env.observation_space.shape, gamma=args.gamma,
+                            epsilon=args.epsilon, min_epsilon=args.min_epsilon, dec_epsilon=args.dec_epsilon, 
+                            batch_size=args.batch_size, memory_size=args.memory_size, 
+                            replace_network_count=args.replace_network_count, device=device,
+                            buffer_type=args.buffer_type, clip_grad_norm=args.clip_grad_norm,
+                            alpha=args.alpha, beta=args.beta, max_beta=args.max_beta, inc_beta=args.inc_beta) 
+    elif args.architecture == 'double':
+        agent = DDQNAgent(learning_rate=args.learning_rate, n_actions=env.action_space.n, 
+                            input_dims=env.observation_space.shape, gamma=args.gamma,
+                            epsilon=args.epsilon, min_epsilon=args.min_epsilon, dec_epsilon=args.dec_epsilon, 
+                            batch_size=args.batch_size, memory_size=args.memory_size, 
+                            replace_network_count=args.replace_network_count, device=device,
+                            buffer_type=args.buffer_type, clip_grad_norm=args.clip_grad_norm,
+                            alpha=args.alpha, beta=args.beta, max_beta=args.max_beta, inc_beta=args.inc_beta) 
+
+
     if args.load_checkpoint:
         agent.load_model(args.load_checkpoint)
         print(f"Loaded model from {args.load_checkpoint}")
@@ -126,7 +145,7 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=32, help="Batch size for training")
     parser.add_argument('--memory_size', type=int, default=1000, help="Replay buffer size")
     parser.add_argument('--replace_network_count', type=int, default=1000, help="Network replacement frequency")
-    parser.add_argument('--architecture', type=str, choices=['dueling', 'dueling double'], default='dueling',
+    parser.add_argument('--architecture', type=str, choices=['dueling', 'dueling double', 'natural', 'double'], default='dueling',
                         help="Choose DQN architecture")
     parser.add_argument('--buffer_type', type=str, choices=['uniform', 'prioritized'], default='uniform',
                         help="Choose replay buffer type: uniform or prioritized")
