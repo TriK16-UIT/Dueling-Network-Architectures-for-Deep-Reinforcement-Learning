@@ -8,7 +8,8 @@ from torch.nn.utils import clip_grad_norm_
 
 class DuelingDQNAgent(object):
     def __init__(self, n_actions, input_dims, learning_rate=1e-4, gamma=0.99,
-                 epsilon=1.0, batch_size=32, memory_size=1000, replace_network_count=1000, clip_grad_norm=False, alpha=0.6, beta=0.4, max_beta=1.0, inc_beta=3e-7,
+                 epsilon=1.0, batch_size=32, memory_size=1000,
+                 clip_grad_norm=False, alpha=0.6, beta=0.4, max_beta=1.0, inc_beta=3e-7,
                  dec_epsilon=1e-5, min_epsilon=0.01, device="cpu", buffer_type='uniform'):
         """
         Initialize the Dueling DQN Agent.
@@ -21,7 +22,6 @@ class DuelingDQNAgent(object):
         epsilon (float): Initial exploration rate for epsilon-greedy action selection.
         batch_size (int): Size of the training batch.
         memory_size (int): Maximum size of the replay buffer.
-        replace_network_count (int): Number of steps before updating the target network.
         clip_grad_norm (bool, optional): Whether to apply gradient clipping. Default is False.
         alpha (float, optional): Prioritization exponent for prioritized replay buffer. Default is 0.6.
         beta (float, optional): Initial value of beta for importance-sampling weights. Default is 0.4.
@@ -39,7 +39,6 @@ class DuelingDQNAgent(object):
         self.epsilon = epsilon
         self.batch_size = batch_size
         self.memory_size = memory_size
-        self.replace_network_count = replace_network_count
         self.clip_grad_norm = clip_grad_norm
         self.alpha = alpha
         self.beta = beta
@@ -48,7 +47,6 @@ class DuelingDQNAgent(object):
         self.dec_epsilon = dec_epsilon
         self.min_epsilon = min_epsilon
         self.action_indices = [i for i in range(n_actions)]
-        self.learn_steps_count = 0
         self.device = device
         self.buffer_type = buffer_type
         
@@ -109,10 +107,9 @@ class DuelingDQNAgent(object):
         """
         Updates the parameters after replace_network_count steps
         """
-        if self.learn_steps_count % self.replace_network_count == 0:
-            self.q_next.load_state_dict(self.q_eval.state_dict())
+        self.q_next.load_state_dict(self.q_eval.state_dict())
 
-    def choose_action(self, observation):
+    def choose_action(self, observation, env):
         """
         Chooses an action using the epsilon-greedy policy.
 
@@ -128,7 +125,7 @@ class DuelingDQNAgent(object):
                 q_values = self.q_eval.forward(state)
                 action = torch.argmax(q_values).item()
         else:
-            action = np.random.choice(self.n_actions)
+            action = env.action_space.sample()
 
         return action
     
@@ -136,11 +133,7 @@ class DuelingDQNAgent(object):
         """
         Train the agent on a batch of experiences.
         """
-        if len(self.replay_buffer) < self.batch_size:
-            return
-        
         self.q_eval.optimizer.zero_grad()
-        self.replace_target_network()
 
         state, action, reward, next_state, done, weights, indices = self.get_sample_experience()
         batch_indices = torch.arange(self.batch_size, device=self.device)
@@ -166,14 +159,14 @@ class DuelingDQNAgent(object):
             clip_grad_norm_(self.q_eval.parameters(), 10.0)
 
         self.q_eval.optimizer.step()
-        self.decrement_epsilon()
         if self.buffer_type == 'prioritized':
             self.increment_beta()
-        self.learn_steps_count += 1
 
         if self.buffer_type == 'prioritized' and indices is not None:
             td_errors = torch.abs(q_target - q_pred).detach().cpu().numpy() + 1e-6
             self.replay_buffer.update_priorities(indices, td_errors)
+
+        return q_pred.mean().item(), loss
 
     def save_model(self, directory, filename):
         """

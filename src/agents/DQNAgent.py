@@ -8,7 +8,8 @@ from torch.nn.utils import clip_grad_norm_
 
 class DQNAgent(object):
     def __init__(self, n_actions, input_dims, learning_rate=1e-4, gamma=0.99,
-                 epsilon=1.0, batch_size=32, memory_size=1000, replace_network_count=1000, clip_grad_norm=False, alpha=0.6, beta=0.4, max_beta=1.0, inc_beta=3e-7,
+                 epsilon=1.0, batch_size=32, memory_size=1000, 
+                 clip_grad_norm=False, alpha=0.6, beta=0.4, max_beta=1.0, inc_beta=3e-7,
                  dec_epsilon=1e-5, min_epsilon=0.01, device="cpu", buffer_type='uniform'):
         """
         Initialize the DQN Agent.
@@ -21,7 +22,6 @@ class DQNAgent(object):
             epsilon (float): Initial exploration rate for epsilon-greedy action selection.
             batch_size (int): Size of the training batch.
             memory_size (int): Maximum size of the replay buffer.
-            replace_network_count (int): Number of steps before updating the target network.
             clip_grad_norm (bool, optional): Whether to apply gradient clipping. Default is False.
             alpha (float, optional): Prioritization exponent for prioritized replay buffer. Default is 0.6.
             beta (float, optional): Initial value of beta for importance-sampling weights. Default is 0.4.
@@ -39,7 +39,6 @@ class DQNAgent(object):
         self.epsilon = epsilon
         self.batch_size = batch_size
         self.memory_size = memory_size
-        self.replace_network_count = replace_network_count
         self.clip_grad_norm = clip_grad_norm
         self.alpha = alpha
         self.beta = beta
@@ -48,7 +47,6 @@ class DQNAgent(object):
         self.dec_epsilon = dec_epsilon
         self.min_epsilon = min_epsilon
         self.action_indices = [i for i in range(n_actions)]
-        self.learn_steps_count = 0
         self.device = device
         self.buffer_type = buffer_type
 
@@ -68,13 +66,13 @@ class DQNAgent(object):
         """
         Decay epsilon by a predefined rate until it reaches the minimum value.
         """
-        self.epsilon = max(self.epsilon - self.dec_epsilon, self.min_epsilon)
+        self.epsilon = self.epsilon - self.dec_epsilon if self.epsilon > self.min_epsilon else self.min_epsilon
 
     def increment_beta(self):
         """
         Increase beta by a predefined rate until it reaches the maximum value.
         """
-        self.beta = min(self.beta + self.inc_beta, self.max_beta)
+        self.beta = self.beta + self.inc_beta if self.beta < self.max_beta else self.max_beta
 
     def store_experience(self, state, action, reward, next_state, done):
         """
@@ -109,38 +107,26 @@ class DQNAgent(object):
         """
         Updates the target network parameters after a certain number of steps.
         """
-        if self.learn_steps_count % self.replace_network_count == 0:
-            self.q_next.load_state_dict(self.q_eval.state_dict())
+        self.q_next.load_state_dict(self.q_eval.state_dict())
 
-    def choose_action(self, observation):
+    def choose_action(self, observation, env):
         """
         Chooses an action using the epsilon-greedy policy.
-
-        Args:
-            observation (numpy.ndarray): The current state observation.
-
-        Returns:
-            int: The chosen action.
         """
+
         if np.random.random() > self.epsilon:
             with torch.no_grad():
                 state = torch.from_numpy(observation).unsqueeze(0).float().to(self.device)
                 q_values = self.q_eval.forward(state)
                 action = torch.argmax(q_values).item()
         else:
-            action = np.random.choice(self.n_actions)
+            action = env.action_space.sample()
 
         return action
 
     def learn(self):
-        """
-        Trains the agent on a batch of experiences.
-        """
-        if len(self.replay_buffer) < self.batch_size:
-            return
-
+        """Trains the agent on a batch of experiences."""
         self.q_eval.optimizer.zero_grad()
-        self.replace_target_network()
 
         state, action, reward, next_state, done, weights, indices = self.get_sample_experience()
         batch_indices = torch.arange(self.batch_size, device=self.device)
@@ -156,24 +142,22 @@ class DQNAgent(object):
         q_target = reward + self.gamma * q_next_max
         q_target[done] = reward[done]
 
-        # Compute loss
         loss = self.q_eval.loss(q_pred, q_target).to(self.device)
         loss = (weights * loss).mean()
         loss.backward()
 
-        # Gradient clipping
         if self.clip_grad_norm:
             clip_grad_norm_(self.q_eval.parameters(), 10.0)
 
         self.q_eval.optimizer.step()
-        self.decrement_epsilon()
         if self.buffer_type == 'prioritized':
             self.increment_beta()
-        self.learn_steps_count += 1
 
         if self.buffer_type == 'prioritized' and indices is not None:
             td_errors = torch.abs(q_target - q_pred).detach().cpu().numpy() + 1e-6
             self.replay_buffer.update_priorities(indices, td_errors)
+
+        return q_pred.mean().item(), loss
 
     def save_model(self, directory, filename):
         """

@@ -1,26 +1,23 @@
-def linear_schedule(start_e, end_e, duration, t):
-    slope = (end_e - start_e) / duration
-    scheduled_value = slope * t + start_e
-    if start_e < end_e:
-        return min(max(scheduled_value, start_e), end_e)
-    else:
-        return max(min(scheduled_value, start_e), end_e)
-
-# Test the scheduler
-def test_linear_schedule():
-    # Test cases
-    tests = [
-        {"start_e": 1.0, "end_e": 0.0, "duration": 10, "t_values": [0, 5, 10, 15]},
-        {"start_e": 0.0, "end_e": 1.0, "duration": 10, "t_values": [0, 5, 10, 15]},
-        {"start_e": 0.5, "end_e": 0.5, "duration": 10, "t_values": [0, 5, 10]},  # Constant value
-    ]
-    
-    # Run tests
-    for i, test in enumerate(tests):
-        print(f"\nTest {i + 1}: start_e={test['start_e']}, end_e={test['end_e']}, duration={test['duration']}")
-        for t in test["t_values"]:
-            result = linear_schedule(test["start_e"], test["end_e"], test["duration"], t)
-            print(f"  At step {t}: {result:.4f}")
-
-# Run the test
-test_linear_schedule()
+import gym
+from common.atari_wrappers import make_atari, wrap_deepmind
+from gym.wrappers import FrameStack
+env = make_atari("BreakoutNoFrameskip-v4", "haha", capture_video=False, video_frequency=0)
+env = wrap_deepmind(env, episode_life=False, clip_rewards=False, frame_stack=False)
+# env.seed(0)
+n1 = []
+for _ in range(1):
+    n1.append(env.reset(seed=42)[0])
+    done = False
+    while not done:
+        next , reward, done, _ = env.step(env.action_space.sample())
+        n1.append(next[0])
+env.seed(0)
+n2 = []
+for _ in range(1):
+    n2.append(env.reset()[0])
+    done = False
+    while not done:
+        next , reward, done, _ = env.step(env.action_space.sample())
+        n2.append(next[0])
+print(n1[0] == n2[0]) # trueprint(n1[1] == n2[1]) # true
+print(n1[2] == n2[2]) # sometimes true????

@@ -22,7 +22,6 @@ class DuelingDDQNAgent(object):
         epsilon (float): Initial exploration rate for epsilon-greedy action selection.
         batch_size (int): Size of the training batch.
         memory_size (int): Maximum size of the replay buffer.
-        replace_network_count (int): Number of steps before updating the target network.
         clip_grad_norm (bool, optional): Whether to apply gradient clipping. Default is False.
         alpha (float, optional): Prioritization exponent for prioritized replay buffer. Default is 0.6.
         beta (float, optional): Initial value of beta for importance-sampling weights. Default is 0.4.
@@ -30,8 +29,6 @@ class DuelingDDQNAgent(object):
         inc_beta (float, optional): Inc rate of beta after each step. Default is 3e-7.
         dec_epsilon (float, optional): Decay rate of epsilon after each step. Default is 1e-5.
         min_epsilon (float, optional): Minimum value of epsilon. Default is 0.1.
-        save_checkpoint_dir (str, optional): Directory to save model checkpoints. Default is None.
-        load_checkpoint_dir (str, optional): Directory to load model checkpoints from. Default is None.
         device (str, optional): Device to run computations on ('cpu' or 'cuda'). Default is 'cpu'.
         buffer_type (str, optional): Type of replay buffer ('uniform' or 'prioritized'). Default is 'uniform'.
         """
@@ -112,7 +109,7 @@ class DuelingDDQNAgent(object):
         """
         self.q_next.load_state_dict(self.q_eval.state_dict())
 
-    def choose_action(self, observation):
+    def choose_action(self, observation, env):
         """
         Chooses an action with epsilon-greedy method
         """
@@ -123,15 +120,12 @@ class DuelingDDQNAgent(object):
                 q_values = self.q_eval.forward(state)
                 action = torch.argmax(q_values).item()
         else:
-            action = np.random.choice(self.n_actions)
+            action = env.action_space.sample()
 
         return action
 
     def learn(self):
-        """Train the agent on a batch of experiences."""
-        if len(self.replay_buffer) < self.batch_size:
-            return
-        
+        """Train the agent on a batch of experiences."""  
         self.q_eval.optimizer.zero_grad()
 
         state, action, reward, next_state, done, weights, indices = self.get_sample_experience()

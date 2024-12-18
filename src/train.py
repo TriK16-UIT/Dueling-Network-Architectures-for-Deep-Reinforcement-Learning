@@ -1,7 +1,5 @@
-import os
 import time
 import numpy as np
-import matplotlib.pyplot as plt
 import torch
 import argparse
 import warnings
@@ -22,10 +20,10 @@ def train(args):
     Args:
         args (argparse.Namespace): Command-line arguments specifying training parameters.
     """
-    seed = generate_seed(args.seed)
-    set_global_seeds(seed)
+    args.seed = generate_seed(args.seed)
+    set_global_seeds(args.seed)
 
-    run_name = f"{args.env_name}__{args.architecture}__{seed}__{int(time.time())}"
+    run_name = f"{args.env_name}__{args.architecture}__{args.seed}__{int(time.time())}"
 
     if args.save_checkpoint is None:
         args.save_checkpoint = f"models/{run_name}"
@@ -44,9 +42,9 @@ def train(args):
     print("Using device: ", device)
 
     env = make_atari(args.env_name, run_name, args.capture_video, args.video_frequency)
-    env.seed(seed)
     # test scale=True    
     env = wrap_deepmind(env)
+    env.action_space.seed(args.seed)
 
     if args.architecture == 'dueling':
         agent = DuelingDQNAgent(learning_rate=args.learning_rate, n_actions=env.action_space.n, 
@@ -82,18 +80,16 @@ def train(args):
         agent.load_model(args.load_checkpoint)
         print(f"Loaded model from {args.load_checkpoint}")
 
-    step_count, best_score = 0, -np.inf
+    step_count, episode, best_score = 0, 0, -np.inf
     start_time = time.time()
-
-    for i in range(args.n_games):
-        obs = env.reset()
-        score, done = 0, False
+    while step_count <= args.total_timesteps:
+        obs = env.reset(seed=args.seed)
+        done = False
 
         while not done:
             agent.decrement_epsilon()
-            action = agent.choose_action(obs)
+            action = agent.choose_action(obs, env)
             new_obs, reward, done, info = env.step(action)
-            score += reward
 
             agent.store_experience(obs, action, reward, new_obs, done)
 
@@ -109,20 +105,23 @@ def train(args):
                 agent.replace_target_network()
 
             obs = new_obs
-            step_count += 1
+            step_count+=1
         
+        # Episode only counts when running out of lives!!! If we place episode+=1 outside this if statement, it goes wrong.
         if "episode" in info:
-            writer.add_scalar("charts/episodic_return", info["episode"]["r"], step_count)
-            writer.add_scalar("charts/episodic_length", info["episode"]["l"], step_count)
+            episode += 1
+            score, length = info["episode"]["r"], info["episode"]["l"]
+            writer.add_scalar("charts/episodic_return", score, step_count)
+            writer.add_scalar("charts/episodic_length", length, step_count)
 
-        # Save the model if this is the best score achieved
-        if score > best_score and step_count > args.learning_start:
-            best_score = score
-            agent.save_model(args.save_checkpoint, 'best_model.pth')
-            print(f"New best score: {best_score:.2f}.")
-
-        print(f'Episode {i+1}/{args.n_games} | Score: {score:.2f} | '
+            print(f'Episode {episode} | Score: {score:.2f} | '
               f'Best Score: {best_score:.2f} | Epsilon: {agent.epsilon:.3f} | Beta: {agent.beta:.3f} | Steps: {step_count}')
+            
+             # Save the model if this is the best score achieved
+            if score > best_score and step_count > args.learning_start:
+                best_score = score
+                agent.save_model(args.save_checkpoint, 'best_model.pth')
+                print(f"New best score: {best_score:.2f}!")
         
     agent.save_model(args.save_checkpoint, 'last_model.pth')
 
@@ -138,7 +137,7 @@ def parse_args():
     """
     parser = argparse.ArgumentParser(description="Train DQN agent with various architectures.")
     parser.add_argument('--env_name', type=str, default='PongNoFrameskip-v4', help='Name of the Atari environment')
-    parser.add_argument('--n_games', type=int, default=1000, help="Number of games to train")
+    parser.add_argument('--total_timesteps', type=int, default=10000000, help="Number of total timesteps")
     parser.add_argument('--device', type=str, choices=['cuda', 'cpu'], default='cuda', help="Device to use: 'cuda' or 'cpu'")
     parser.add_argument('--learning_rate', type=float, default=1e-4, help="Learning rate for the agent")
     parser.add_argument('--gamma', type=float, default=0.99, help="Discount factor")

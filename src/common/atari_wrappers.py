@@ -12,8 +12,10 @@ from gym.wrappers import (
 )
 from .wrappers import TimeLimit
 
-def make_atari(env_id, run_name, capture_video, video_frequency, max_episode_steps=None):
-    if capture_video:
+def make_atari(env_id, run_name, capture_video, video_frequency, max_episode_steps=None, enjoy=False):
+    if enjoy:
+        env = gym.make(env_id, render_mode="human")
+    elif capture_video:
         env = gym.make(env_id, render_mode="rgb_array")
         env = RecordVideo(env, f"videos/{run_name}", episode_trigger=lambda episode_id: episode_id%video_frequency==0)
     else:
@@ -300,8 +302,8 @@ class FrameStack(gym.Wrapper):
         shp = env.observation_space.shape
         self.observation_space = spaces.Box(low=0, high=255, shape=(shp[:-1] + (shp[-1] * k,)), dtype=env.observation_space.dtype)
 
-    def reset(self):
-        ob = self.env.reset()
+    def reset(self, **kwargs):
+        ob = self.env.reset(**kwargs)
         for _ in range(self.k):
             self.frames.append(ob)
         return self._get_ob()
