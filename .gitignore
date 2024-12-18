@@ -1,4 +1,5 @@
 .venv
 models
-tmp
-plots
+videos
+runs
+

@@ -8,7 +8,8 @@ from torch.nn.utils import clip_grad_norm_
 
 class DuelingDDQNAgent(object):
     def __init__(self, n_actions, input_dims, learning_rate=1e-4, gamma=0.99,
-                 epsilon=1.0, batch_size=32, memory_size=1000, replace_network_count=1000, clip_grad_norm=False, alpha=0.6, beta=0.4, max_beta=1.0, inc_beta=3e-7,
+                 epsilon=1.0, batch_size=32, memory_size=1000, 
+                 clip_grad_norm=False, alpha=0.6, beta=0.4, max_beta=1.0, inc_beta=3e-7,
                  dec_epsilon=1e-5, min_epsilon=0.01, device="cpu", buffer_type='uniform'):
         """
         Initialize the Dueling Double DQN Agent.
@@ -41,7 +42,6 @@ class DuelingDDQNAgent(object):
         self.epsilon = epsilon
         self.batch_size = batch_size
         self.memory_size = memory_size
-        self.replace_network_count = replace_network_count
         self.clip_grad_norm = clip_grad_norm
         self.alpha = alpha
         self.beta = beta
@@ -50,7 +50,6 @@ class DuelingDDQNAgent(object):
         self.dec_epsilon = dec_epsilon
         self.min_epsilon = min_epsilon
         self.action_indices = [i for i in range(n_actions)]
-        self.learn_steps_count = 0
         self.device = device
         self.buffer_type = buffer_type
         
@@ -67,10 +66,10 @@ class DuelingDDQNAgent(object):
             self.replay_buffer = PrioritizedReplayBuffer(size=self.memory_size, alpha=self.alpha)
 
     def decrement_epsilon(self):
-            """
-            Decay epsilon by a predefined rate until it reaches the minimum value.
-            """
-            self.epsilon = self.epsilon - self.dec_epsilon if self.epsilon > self.min_epsilon else self.min_epsilon
+        """
+        Decay epsilon by a predefined rate until it reaches the minimum value.
+        """
+        self.epsilon = self.epsilon - self.dec_epsilon if self.epsilon > self.min_epsilon else self.min_epsilon
 
     def increment_beta(self):
         """
@@ -111,8 +110,7 @@ class DuelingDDQNAgent(object):
         """
         Updates the parameters after replace_network_count steps
         """
-        if self.learn_steps_count % self.replace_network_count == 0:
-            self.q_next.load_state_dict(self.q_eval.state_dict())
+        self.q_next.load_state_dict(self.q_eval.state_dict())
 
     def choose_action(self, observation):
         """
@@ -135,7 +133,6 @@ class DuelingDDQNAgent(object):
             return
         
         self.q_eval.optimizer.zero_grad()
-        self.replace_target_network()
 
         state, action, reward, next_state, done, weights, indices = self.get_sample_experience()
         batch_indices = torch.arange(self.batch_size, device=self.device)
@@ -159,14 +156,15 @@ class DuelingDDQNAgent(object):
             clip_grad_norm_(self.q_eval.parameters(), 10.0)
 
         self.q_eval.optimizer.step()
-        self.decrement_epsilon()
         if self.buffer_type == 'prioritized':
             self.increment_beta()
-        self.learn_steps_count += 1
 
         if self.buffer_type == 'prioritized' and indices is not None:
             td_errors = torch.abs(q_target - q_pred).detach().cpu().numpy() + 1e-6
             self.replay_buffer.update_priorities(indices, td_errors)
+
+        # Return Q value and loss
+        return q_pred.mean().item(), loss
 
     def save_model(self, directory, filename):
         """

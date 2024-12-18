@@ -6,10 +6,19 @@ import cv2
 cv2.ocl.setUseOpenCL(False)
 from collections import deque
 from gym import spaces
+from gym.wrappers import (
+    RecordEpisodeStatistics,
+    RecordVideo
+)
 from .wrappers import TimeLimit
 
-def make_atari(env_id, max_episode_steps=None, render_mode="rgb_array"):
-    env = gym.make(env_id, render_mode=render_mode)
+def make_atari(env_id, run_name, capture_video, video_frequency, max_episode_steps=None):
+    if capture_video:
+        env = gym.make(env_id, render_mode="rgb_array")
+        env = RecordVideo(env, f"videos/{run_name}", episode_trigger=lambda episode_id: episode_id%video_frequency==0)
+    else:
+        env = gym.make(env_id) 
+    env = RecordEpisodeStatistics(env)
     assert 'NoFrameskip' in env.spec.id
     env = NoopResetEnv(env, noop_max=30)
     env = MaxAndSkipEnv(env, skip=4)

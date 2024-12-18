@@ -4,6 +4,12 @@ import matplotlib.pyplot as plt
 import torch
 import numpy as np
 import random
+import time
+
+def generate_seed(seed):
+    if seed is None:
+        seed = int(time.time() * 1000) % (2**32)
+    return seed
 
 def get_device(device):
     if device == 'cuda' and torch.cuda.is_available():
