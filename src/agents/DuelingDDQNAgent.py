@@ -8,8 +8,8 @@ from torch.nn.utils import clip_grad_norm_
 
 class DuelingDDQNAgent(object):
     def __init__(self, n_actions, input_dims, learning_rate=1e-4, gamma=0.99,
-                 epsilon=0.01, batch_size=32, memory_size=1000, replace_network_count=1000, clip_grad_norm=False, alpha=0.6, beta=0.4, max_beta=1.0, inc_beta=3e-7,
-                 dec_epsilon=1e-5, min_epsilon=0.1, device="cpu", buffer_type='uniform'):
+                 epsilon=1.0, batch_size=32, memory_size=1000, replace_network_count=1000, clip_grad_norm=False, alpha=0.6, beta=0.4, max_beta=1.0, inc_beta=3e-7,
+                 dec_epsilon=1e-5, min_epsilon=0.01, device="cpu", buffer_type='uniform'):
         """
         Initialize the Dueling Double DQN Agent.
 

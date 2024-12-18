@@ -1,5 +1,5 @@
-import os
+import gym
 
-checkpoint_dir = os.path.join(os.getcwd(), 'haha')
+tree = gym.envs.registry.all()
 
-print(checkpoint_dir)
+print(tree)

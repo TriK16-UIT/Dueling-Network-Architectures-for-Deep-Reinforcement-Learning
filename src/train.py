@@ -145,7 +145,7 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=32, help="Batch size for training")
     parser.add_argument('--memory_size', type=int, default=1000, help="Replay buffer size")
     parser.add_argument('--replace_network_count', type=int, default=1000, help="Network replacement frequency")
-    parser.add_argument('--architecture', type=str, choices=['dueling', 'dueling double', 'natural', 'double'], default='dueling',
+    parser.add_argument('--architecture', type=str, choices=['dueling', 'dueling_double', 'natural', 'double'], default='dueling',
                         help="Choose DQN architecture")
     parser.add_argument('--buffer_type', type=str, choices=['uniform', 'prioritized'], default='uniform',
                         help="Choose replay buffer type: uniform or prioritized")
