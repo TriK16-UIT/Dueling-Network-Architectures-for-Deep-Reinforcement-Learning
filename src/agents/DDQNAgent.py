@@ -152,7 +152,6 @@ class DDQNAgent(object):
         self.q_eval.optimizer.step()
         if self.buffer_type == 'prioritized':
             self.increment_beta()
-        self.learn_steps_count += 1
 
         if self.buffer_type == 'prioritized' and indices is not None:
             td_errors = torch.abs(q_target - q_pred).detach().cpu().numpy() + 1e-6

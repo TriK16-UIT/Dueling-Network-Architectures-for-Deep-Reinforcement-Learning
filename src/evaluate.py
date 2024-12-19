@@ -30,7 +30,7 @@ def evaluate(args):
     print("Using device: ", device)
 
     env = make_atari(args.env_name, run_name, args.capture_video, args.video_frequency)
-    env = wrap_deepmind(env)
+    env = wrap_deepmind(env, episode_life=False)
     env.action_space.seed(args.seed)
 
     if args.architecture == 'dueling':

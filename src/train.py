@@ -101,7 +101,7 @@ def train(args):
                     writer.add_scalar("losses/q_values", q_values, step_count)
                     writer.add_scalar("charts/SPS", int(step_count / (time.time() - start_time)), step_count)
 
-            if step_count > args.learning_start and step_count % args.replace_network_count:
+            if step_count > args.learning_start and step_count % args.replace_network_count == 0:
                 agent.replace_target_network()
 
             obs = new_obs
