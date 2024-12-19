@@ -25,13 +25,13 @@ def enjoy(args):
 
     #Epsilon = 0.01 to avoid getting stuck
     if args.architecture == 'dueling':
-        agent = DuelingDQNAgent(n_actions=env.action_space.n, input_dims=env.observation_space.shape, device=args.device, epsilon=0.01)
+        agent = DuelingDQNAgent(n_actions=env.action_space.n, input_dims=env.observation_space.shape, device=args.device, epsilon=0.05)
     elif args.architecture == 'dueling_double':
-        agent = DuelingDDQNAgent(n_actions=env.action_space.n, input_dims=env.observation_space.shape, device=args.device, epsilon=0.01)
+        agent = DuelingDDQNAgent(n_actions=env.action_space.n, input_dims=env.observation_space.shape, device=args.device, epsilon=0.05)
     elif args.architecture == 'natural':
-        agent = DQNAgent(n_actions=env.action_space.n, input_dims=env.observation_space.shape, device=args.device, epsilon=0.01)
+        agent = DQNAgent(n_actions=env.action_space.n, input_dims=env.observation_space.shape, device=args.device, epsilon=0.05)
     elif args.architecture == 'double':
-        agent = DDQNAgent(n_actions=env.action_space.n, input_dims=env.observation_space.shape, device=args.device, epsilon=0.01)
+        agent = DDQNAgent(n_actions=env.action_space.n, input_dims=env.observation_space.shape, device=args.device, epsilon=0.05)
 
     if args.load_checkpoint:
         agent.load_model(args.load_checkpoint)
